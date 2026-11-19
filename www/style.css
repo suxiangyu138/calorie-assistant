@@ -528,6 +528,8 @@ input {
   gap: 8px;
 }
 
+.item-line { min-height: 44px; }
+
 .item-name {
   flex: 1;
   min-width: 0;
