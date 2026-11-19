@@ -24,9 +24,10 @@
       <button id="prevDay" class="icon-btn" aria-label="前一天">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
-      <div class="day-title">
+      <div id="dayTitle" class="day-title" role="button" tabindex="0">
         <span id="homeDate" class="day-date"></span>
         <span id="homeWeek" class="day-week"></span>
+        <svg class="day-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 10l5 5 5-5"/></svg>
       </div>
       <button id="nextDay" class="icon-btn" aria-label="后一天">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5l7 7-7 7"/></svg>
@@ -128,6 +129,29 @@
       <div class="grow"></div>
       <button id="sheetCancel" class="text-btn">取消</button>
       <button id="sheetOk" class="primary-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="datePicker" class="sheet-layer hidden">
+  <div id="dateMask" class="sheet-mask"></div>
+  <div class="sheet-panel date-panel">
+    <div class="sheet-handle"></div>
+    <div class="date-head">
+      <button id="datePrev" class="date-arrow" aria-label="上个月">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <span id="dateTitle" class="date-title"></span>
+      <button id="dateNext" class="date-arrow" aria-label="下个月">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+    <div class="date-week">
+      <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+    </div>
+    <div id="dateGrid" class="date-grid"></div>
+    <div class="date-foot">
+      <button id="dateToday" class="text-btn">回到今天</button>
     </div>
   </div>
 </div>

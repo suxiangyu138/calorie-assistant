@@ -300,6 +300,15 @@ function bindStaticEvents() {
   $('onboardingSave').addEventListener('click', saveOnboarding);
   $('prevDay').addEventListener('click', () => changeDay(-1));
   $('nextDay').addEventListener('click', () => changeDay(1));
+  $('dayTitle').addEventListener('click', openDatePicker);
+  $('dateMask').addEventListener('click', closeDatePicker);
+  $('datePrev').addEventListener('click', () => shiftPickerMonth(-1));
+  $('dateNext').addEventListener('click', () => shiftPickerMonth(1));
+  $('dateToday').addEventListener('click', () => {
+    state.date = todayStr();
+    closeDatePicker();
+    renderHome();
+  });
   $('btnStats').addEventListener('click', openStats);
   $('btnSettings').addEventListener('click', () => { switchView('settings'); renderSettings(); });
   $('statsBack').addEventListener('click', () => switchView('home'));
@@ -323,6 +332,7 @@ function bindStaticEvents() {
 
 function handleBack() {
   if (!$('dialog').classList.contains('hidden')) { closeDialog(); return true; }
+  if (!$('datePicker').classList.contains('hidden')) { closeDatePicker(); return true; }
   if (!$('sheet').classList.contains('hidden')) { closeSheet(); return true; }
   if (state.view === 'camera') { stopCamera(); switchView('home'); return true; }
   if (state.view === 'stats' || state.view === 'settings') { switchView('home'); return true; }
@@ -346,6 +356,66 @@ function changeDay(offset) {
   if (next > todayStr()) return;
   state.date = next;
   renderHome();
+}
+
+const picker = { year: 0, month: 0 };
+
+function openDatePicker() {
+  const [year, month] = state.date.split('-').map(Number);
+  picker.year = year;
+  picker.month = month;
+  renderDatePicker();
+  $('datePicker').classList.remove('hidden');
+  $('datePicker').classList.add('closing');
+  requestAnimationFrame(() => requestAnimationFrame(() => $('datePicker').classList.remove('closing')));
+}
+
+function closeDatePicker() {
+  $('datePicker').classList.add('closing');
+  setTimeout(() => {
+    $('datePicker').classList.add('hidden');
+    $('datePicker').classList.remove('closing');
+  }, 240);
+}
+
+function shiftPickerMonth(delta) {
+  let year = picker.year;
+  let month = picker.month + delta;
+  if (month < 1) { month = 12; year -= 1; }
+  if (month > 12) { month = 1; year += 1; }
+  picker.year = year;
+  picker.month = month;
+  renderDatePicker();
+}
+
+function renderDatePicker() {
+  const year = picker.year;
+  const month = picker.month;
+  const today = todayStr();
+  const [todayYear, todayMonth] = today.split('-').map(Number);
+  $('dateTitle').textContent = `${year}年${month}月`;
+  $('dateNext').disabled = year === todayYear && month === todayMonth;
+  const startWeekday = new Date(year, month - 1, 1).getDay();
+  const days = new Date(year, month, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i += 1) {
+    cells.push('<span class="date-cell blank"></span>');
+  }
+  for (let day = 1; day <= days; day += 1) {
+    const date = `${year}-${pad(month)}-${pad(day)}`;
+    const classes = ['date-cell'];
+    if (date === today) classes.push('today');
+    if (date === state.date) classes.push('on');
+    cells.push(`<button class="${classes.join(' ')}" data-date="${date}"${date > today ? ' disabled' : ''}>${day}</button>`);
+  }
+  $('dateGrid').innerHTML = cells.join('');
+  $('dateGrid').querySelectorAll('[data-date]').forEach((cell) => {
+    cell.addEventListener('click', () => {
+      state.date = cell.dataset.date;
+      closeDatePicker();
+      renderHome();
+    });
+  });
 }
 
 async function renderHome() {
@@ -1092,4 +1162,16 @@ function askClear() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', init);
+let started = false;
+
+function startApp() {
+  if (started) return;
+  started = true;
+  init();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startApp);
+} else {
+  startApp();
+}

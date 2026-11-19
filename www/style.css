@@ -121,11 +121,18 @@ input {
 
 .day-title {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   min-width: 108px;
+  min-height: 44px;
+  padding: 0 4px;
+  border-radius: var(--radius-btn);
   justify-content: center;
 }
+
+.day-title:active { background: var(--bg-soft); }
+
+.day-caret { width: 14px; height: 14px; color: var(--text-3); flex: none; }
 
 .day-date { font-size: 15px; font-weight: 500; }
 .day-week { font-size: 13px; color: var(--text-2); }
@@ -616,6 +623,95 @@ input {
 .mealtype-chip.on {
   background: var(--accent);
   color: #ffffff;
+}
+
+/* ---------- 日期选择 ---------- */
+
+.date-panel {
+  height: auto;
+  max-height: 80vh;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+
+.date-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 0 4px;
+  flex: none;
+}
+
+.date-title { font-size: 15px; font-weight: 500; }
+
+.date-arrow {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  border-radius: 999px;
+}
+
+.date-arrow svg { width: 20px; height: 20px; }
+.date-arrow[disabled] { color: var(--text-3); }
+.date-arrow:active:not([disabled]) { background: var(--bg-soft); }
+
+.date-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  flex: none;
+}
+
+.date-week span {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 32px;
+}
+
+.date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: 2px;
+}
+
+.date-cell {
+  height: 44px;
+  border-radius: 999px;
+  font-size: 15px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-cell.blank { pointer-events: none; }
+.date-cell[disabled] { color: var(--text-3); }
+.date-cell.today { color: var(--accent); font-weight: 500; }
+.date-cell.on { background: var(--accent); color: #ffffff; font-weight: 500; }
+
+.date-cell.today::after {
+  content: "";
+  position: absolute;
+  bottom: 7px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.date-cell.on::after { display: none; }
+
+.date-foot {
+  display: flex;
+  justify-content: center;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  flex: none;
 }
 
 /* ---------- 弹窗 ---------- */
