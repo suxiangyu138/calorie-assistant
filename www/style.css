@@ -206,7 +206,7 @@ input {
   color: var(--text-2);
 }
 
-.ring-left.warn { color: var(--accent); }
+.ring-left.warn { color: var(--text); }
 
 /* ---------- 宏量 ---------- */
 
@@ -825,6 +825,14 @@ input {
 .manage-row:last-child { border-bottom: 0; }
 .manage-row .k { color: var(--text); }
 .manage-row .danger { color: var(--text-2); }
+.manage-row .v {
+  color: var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+.manage-row .v svg { width: 16px; height: 16px; color: var(--text-3); }
 
 /* ---------- 引导 ---------- */
 
