@@ -318,7 +318,7 @@ function bindStaticEvents() {
   $('camBack').addEventListener('click', () => { stopCamera(); switchView('home'); });
   $('btnShutter').addEventListener('click', onShutter);
   $('btnGallery').addEventListener('click', () => $('fileInput').click());
-  $('btnManual').addEventListener('click', () => { stopCamera(); openSheet('manual'); });
+  $('btnManual').addEventListener('click', () => { stopCamera(); switchView('home'); openSheet('manual'); });
   $('fileInput').addEventListener('change', onPickPhoto);
   $('importInput').addEventListener('change', onPickImport);
   $('sheetMask').addEventListener('click', closeSheet);
@@ -536,6 +536,7 @@ async function openCamera() {
     const video = $('video');
     video.srcObject = state.stream;
     await video.play();
+    video.classList.remove('off');
   } catch (e) {
     $('camStatus').textContent = '相机打不开，可以用相册或手动输入。';
   }
@@ -547,6 +548,7 @@ function stopCamera() {
     state.stream = null;
   }
   $('video').srcObject = null;
+  $('video').classList.add('off');
 }
 
 function setCamBusy(busy) {
@@ -795,17 +797,25 @@ function renderSheet() {
         <span>克数</span>
         <input class="item-grams" data-f="grams" type="number" inputmode="decimal" value="${item.grams}">
         <span>g</span>
-        <span class="item-macros">蛋白 ${Math.round(item.protein)} · 脂肪 ${Math.round(item.fat)} · 碳水 ${Math.round(item.carbs)}</span>
+      </div>
+      <div class="item-macro-edit">
+        <label>蛋白<input class="item-num" data-f="protein" type="number" inputmode="decimal" value="${item.protein}"><span>g</span></label>
+        <label>脂肪<input class="item-num" data-f="fat" type="number" inputmode="decimal" value="${item.fat}"><span>g</span></label>
+        <label>碳水<input class="item-num" data-f="carbs" type="number" inputmode="decimal" value="${item.carbs}"><span>g</span></label>
       </div>`;
     row.querySelector('[data-f="name"]').addEventListener('input', (e) => { item.name = e.target.value; });
     row.querySelector('[data-f="calories"]').addEventListener('input', (e) => { item.calories = Math.max(0, num(e.target.value)); });
     row.querySelector('[data-f="grams"]').addEventListener('input', (e) => {
-      const grams = Math.max(0, num(e.target.value));
-      item.grams = grams;
+      item.grams = Math.max(0, num(e.target.value));
       applyRatio(item);
       row.querySelector('[data-f="calories"]').value = item.calories;
-      row.querySelector('.item-macros').textContent = `蛋白 ${Math.round(item.protein)} · 脂肪 ${Math.round(item.fat)} · 碳水 ${Math.round(item.carbs)}`;
+      row.querySelector('[data-f="protein"]').value = item.protein;
+      row.querySelector('[data-f="fat"]').value = item.fat;
+      row.querySelector('[data-f="carbs"]').value = item.carbs;
     });
+    row.querySelector('[data-f="protein"]').addEventListener('input', (e) => { item.protein = Math.max(0, num(e.target.value)); });
+    row.querySelector('[data-f="fat"]').addEventListener('input', (e) => { item.fat = Math.max(0, num(e.target.value)); });
+    row.querySelector('[data-f="carbs"]').addEventListener('input', (e) => { item.carbs = Math.max(0, num(e.target.value)); });
     row.querySelector('[data-del]').addEventListener('click', () => {
       if (sheet.items.length <= 1) { toast('至少保留一条'); return; }
       sheet.items.splice(index, 1);

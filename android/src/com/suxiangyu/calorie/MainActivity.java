@@ -92,6 +92,10 @@ public class MainActivity extends Activity {
 
         setContentView(webView);
         webView.loadUrl("http://127.0.0.1:" + server.getPort() + "/");
+
+        if (!hasCameraPermission()) {
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, REQ_CAMERA);
+        }
     }
 
     private boolean hasCameraPermission() {

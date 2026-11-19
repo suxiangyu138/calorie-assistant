@@ -360,7 +360,10 @@ input {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  background: #000000;
 }
+
+.camera video.off { visibility: hidden; }
 
 .frame {
   position: absolute;
@@ -588,7 +591,33 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
-.item-macros { color: var(--text-3); }
+.item-macro-edit {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.item-macro-edit label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.item-num {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+  padding: 3px 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.item-macro-edit label > span { color: var(--text-3); flex: none; }
 
 .raw-text {
   font-size: 13px;
