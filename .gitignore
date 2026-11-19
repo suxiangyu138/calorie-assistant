@@ -1,0 +1,10 @@
+build/
+dist/
+keys/
+android/assets/
+android/icon-source.jpg
+node_modules/
+npm-debug.log*
+.DS_Store
+*.iml
+.idea/

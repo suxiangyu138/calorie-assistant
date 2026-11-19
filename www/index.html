@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>热量记录</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="onboarding" class="onboarding hidden">
+  <div class="onboarding-head">
+    <h1>先填身体信息</h1>
+    <p>只填一次，之后随时能在设置里改。</p>
+  </div>
+  <div id="onboardingForm" class="onboarding-form"></div>
+  <button id="onboardingSave" class="primary-btn wide">开始记录</button>
+</div>
+
+<div id="app" class="app hidden">
+  <section id="view-home" class="view hidden">
+    <header class="topbar">
+      <button id="prevDay" class="icon-btn" aria-label="前一天">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <div class="day-title">
+        <span id="homeDate" class="day-date"></span>
+        <span id="homeWeek" class="day-week"></span>
+      </div>
+      <button id="nextDay" class="icon-btn" aria-label="后一天">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <div class="grow"></div>
+      <button id="btnStats" class="icon-btn" aria-label="统计">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20V11M10 20V5M16 20v-6M22 20H2"/></svg>
+      </button>
+    </header>
+
+    <main class="home-main">
+      <div class="ring-block">
+        <svg class="ring" viewBox="0 0 220 220" aria-hidden="true">
+          <circle class="ring-track" cx="110" cy="110" r="98"></circle>
+          <circle id="ringValue" class="ring-value" cx="110" cy="110" r="98"></circle>
+        </svg>
+        <div class="ring-center">
+          <div id="ringNum" class="ring-num">0</div>
+          <div class="ring-unit">kcal</div>
+        </div>
+      </div>
+      <p id="ringTarget" class="ring-target"></p>
+      <p id="ringLeft" class="ring-left"></p>
+
+      <div id="macros" class="macros"></div>
+
+      <div class="list-head">
+        <h2 id="listTitle">今日记录</h2>
+        <span id="listCount" class="list-count"></span>
+      </div>
+      <ul id="mealList" class="meal-list"></ul>
+    </main>
+
+    <button id="fab" class="fab" aria-label="新增记录">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </section>
+
+  <section id="view-camera" class="view camera hidden">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="frame"><i></i><i></i><i></i><i></i></div>
+    <p id="camStatus" class="cam-status"></p>
+    <button id="camBack" class="cam-back" aria-label="返回">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="cam-bar">
+      <button id="btnGallery" class="cam-side">相册</button>
+      <button id="btnShutter" class="shutter" aria-label="拍照"></button>
+      <button id="btnManual" class="cam-side">手动</button>
+    </div>
+  </section>
+
+  <section id="view-stats" class="view page hidden">
+    <header class="topbar">
+      <button id="statsBack" class="icon-btn" aria-label="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h1 class="page-title">统计</h1>
+      <div class="grow"></div>
+      <button id="btnWeight" class="text-btn" aria-label="记录体重">记体重</button>
+      <button id="btnSettings" class="text-btn" aria-label="设置">设置</button>
+    </header>
+    <main class="page-main">
+      <section class="chart-block">
+        <h2 class="block-title">近七天热量</h2>
+        <div id="calChart" class="chart"></div>
+      </section>
+      <section class="chart-block">
+        <h2 class="block-title">体重</h2>
+        <div id="weightChart" class="chart"></div>
+      </section>
+      <section class="summary">
+        <h2 class="block-title">本周平均</h2>
+        <div id="weekSummary" class="summary-rows"></div>
+      </section>
+    </main>
+  </section>
+
+  <section id="view-settings" class="view page hidden">
+    <header class="topbar">
+      <button id="settingsBack" class="icon-btn" aria-label="返回">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <h1 class="page-title">设置</h1>
+    </header>
+    <main id="settingsMain" class="page-main settings-main"></main>
+  </section>
+</div>
+
+<div id="sheet" class="sheet-layer hidden">
+  <div id="sheetMask" class="sheet-mask"></div>
+  <div class="sheet-panel">
+    <div class="sheet-handle"></div>
+    <h2 id="sheetTitle" class="sheet-title"></h2>
+    <p id="sheetNote" class="sheet-note hidden"></p>
+    <div id="sheetBody" class="sheet-body"></div>
+    <div class="sheet-foot">
+      <button id="sheetExtra" class="ghost-btn"></button>
+      <div class="grow"></div>
+      <button id="sheetCancel" class="text-btn">取消</button>
+      <button id="sheetOk" class="primary-btn">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="dialog" class="dialog hidden">
+  <div id="dialogMask" class="dialog-mask"></div>
+  <div class="dialog-box">
+    <h3 id="dialogTitle" class="dialog-title"></h3>
+    <div id="dialogBody" class="dialog-body"></div>
+    <div class="dialog-foot">
+      <button id="dialogCancel" class="text-btn">取消</button>
+      <button id="dialogOk" class="primary-btn">确定</button>
+    </div>
+  </div>
+</div>
+
+<input id="fileInput" type="file" accept="image/*" hidden>
+<input id="importInput" type="file" accept="application/json,.json" hidden>
+<div id="toast" class="toast hidden"></div>
+
+<script src="db.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
