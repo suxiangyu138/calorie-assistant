@@ -85,7 +85,9 @@ function computeMetrics(p) {
   const heightM = p.height / 100;
   const bmi = p.weight / (heightM * heightM);
   const bmr = 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'male' ? 5 : -161);
-  const tdee = bmr * ACTIVITY[p.activity];
+  const formulaTdee = bmr * ACTIVITY[p.activity];
+  const personaActive = !!(p.persona && p.persona.tdee > 0);
+  const tdee = personaActive ? p.persona.tdee : formulaTdee;
   let target = tdee;
   if (p.goal === 'cut') target = tdee - p.deficit;
   if (p.goal === 'gain') target = tdee * GOAL_FACTOR.gain;
@@ -94,20 +96,35 @@ function computeMetrics(p) {
   if (clamped) target = floor;
   const gap = tdee - target;
   const protein = p.weight * p.proteinFactor;
-  const fat = (target * p.fatRatio) / 9;
+  const fatByRatio = (target * p.fatRatio) / 9;
+  const fatMin = p.weight * 0.6;
+  const fatMax = p.weight * 1.0;
+  let fat = fatByRatio;
+  let fatGuard = 0;
+  if (fat < fatMin) { fat = fatMin; fatGuard = -1; }
+  else if (fat > fatMax) { fat = fatMax; fatGuard = 1; }
   const carbs = Math.max(0, (target - protein * 4 - fat * 9) / 4);
-  const heavy = !clamped && gap > tdee * 0.35;
+  const carbsPerKg = p.weight > 0 ? carbs / p.weight : 0;
+  const gapRatio = tdee > 0 ? gap / tdee : 0;
+  const heavy = !clamped && gapRatio > 0.25;
+  const small = !clamped && p.goal === 'cut' && gapRatio > 0 && gapRatio < 0.15;
   return {
     bmi: round(bmi, 2),
     bmr: round(bmr, 2),
     tdee: round(tdee, 2),
+    formulaTdee: round(formulaTdee, 2),
+    personaActive,
     target: round(target, 2),
     gap: round(gap, 2),
     protein: round(protein, 2),
     fat: round(fat, 2),
     carbs: round(carbs, 2),
+    gapRatio: round(gapRatio, 4),
+    carbsPerKg: round(carbsPerKg, 2),
     clamped,
-    heavy
+    heavy,
+    small,
+    fatGuard
   };
 }
 
@@ -123,9 +140,17 @@ function loadProfile() {
       sex: p.sex === 'female' ? 'female' : 'male',
       activity: ACTIVITY[p.activity] ? p.activity : 'sedentary',
       goal,
-      deficit: Number.isFinite(Number(p.deficit)) ? Number(p.deficit) : 350,
+      deficit: Number.isFinite(Number(p.deficit)) ? Number(p.deficit) : 400,
       proteinFactor: Number.isFinite(Number(p.proteinFactor)) ? Number(p.proteinFactor) : (goal === 'cut' ? 1.8 : 1.6),
-      fatRatio: Number.isFinite(Number(p.fatRatio)) ? Number(p.fatRatio) : 0.22,
+      fatRatio: Number.isFinite(Number(p.fatRatio)) ? Number(p.fatRatio) : 0.25,
+      persona: p.persona && Number.isFinite(Number(p.persona.tdee)) && Number(p.persona.tdee) > 0
+        ? {
+            text: String(p.persona.text || ''),
+            tdee: Number(p.persona.tdee),
+            activity: ACTIVITY[p.persona.activity] ? p.persona.activity : null,
+            note: String(p.persona.note || '')
+          }
+        : null,
       apiKey: typeof p.apiKey === 'string' ? p.apiKey : ''
     };
   } catch (e) {
@@ -139,11 +164,12 @@ function persistProfile() {
     sex: state.profile.sex, activity: state.profile.activity, goal: state.profile.goal,
     deficit: state.profile.deficit, proteinFactor: state.profile.proteinFactor,
     fatRatio: state.profile.fatRatio,
+    persona: state.profile.persona,
     apiKey: state.profile.apiKey
   }));
 }
 
-const DEFAULT_PROFILE = { height: 175, weight: 65, age: 22, sex: 'male', activity: 'sedentary', goal: 'cut', deficit: 350, proteinFactor: 1.8, fatRatio: 0.22, apiKey: '' };
+const DEFAULT_PROFILE = { height: 175, weight: 65, age: 22, sex: 'male', activity: 'sedentary', goal: 'cut', deficit: 400, proteinFactor: 1.8, fatRatio: 0.25, persona: null, apiKey: '' };
 let draft = { ...DEFAULT_PROFILE };
 
 async function init() {
@@ -210,7 +236,12 @@ function editField(key, target, done) {
   if (key === 'activity') {
     promptChoice({
       title: '活动水平', value: target.activity,
-      options: [['sedentary', '久坐'], ['light', '轻度'], ['moderate', '中度'], ['high', '高度']],
+      options: [
+        ['sedentary', '久坐', '几乎不运动，坐着的时间长'],
+        ['light', '轻度', '每周 1–3 次轻运动'],
+        ['moderate', '中度', '每周 3–5 次力量或有氧'],
+        ['high', '高度', '每周 6 次以上，或体力工作']
+      ],
       onOk: (v) => { target.activity = v; done(); }
     });
     return;
@@ -235,7 +266,7 @@ function editField(key, target, done) {
     promptChoice({
       title: '每日热量缺口',
       value: String(target.deficit),
-      options: [['200', '200 kcal'], ['300', '300 kcal'], ['350', '350 kcal'], ['400', '400 kcal'], ['500', '500 kcal'], ['custom', '自定义']],
+      options: [['300', '300 kcal'], ['400', '400 kcal'], ['450', '450 kcal'], ['500', '500 kcal'], ['custom', '自定义']],
       onOk: (v) => {
         if (v === 'custom') {
           promptNumber({
@@ -313,9 +344,10 @@ function promptNumber({ title, value, unit, onOk }) {
 function promptChoice({ title, value, options, onOk }) {
   openDialog({
     title,
-    body: `<div class="dialog-options">${options.map(([k, label]) => `
+    body: `<div class="dialog-options">${options.map(([k, label, desc]) => `
       <button class="dialog-option ${k === value ? 'on' : ''}" data-value="${k}">
-        <span>${label}</span>${k === value ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12l5 5 9-10"/></svg>' : ''}
+        <span class="dialog-option-text">${label}${desc ? `<span class="dialog-option-desc">${desc}</span>` : ''}</span>
+        ${k === value ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 12l5 5 9-10"/></svg>' : ''}
       </button>`).join('')}</div>`,
     onOpen: () => {
       $('dialogBody').querySelectorAll('.dialog-option').forEach((btn) => {
@@ -529,8 +561,13 @@ async function renderHome() {
   }
   list.innerHTML = meals.map((item) => `
     <li class="meal-row" data-id="${item.id}">
-      <span class="meal-name">${escapeHtml(item.name)}<span class="meal-sub">${MEAL_LABELS[item.mealType] || ''}</span></span>
-      <span class="meal-kcal">${display(item.calories)} kcal</span>
+      <div class="meal-info">
+        <div class="meal-top">
+          <span class="meal-name">${escapeHtml(item.name)}</span>
+          <span class="meal-kcal">${display(item.calories)} kcal</span>
+        </div>
+        <div class="meal-meta">${MEAL_LABELS[item.mealType] || ''} · 蛋白 ${Math.round(num(item.protein))} · 脂肪 ${Math.round(num(item.fat))} · 碳水 ${Math.round(num(item.carbs))}</div>
+      </div>
       <button class="meal-del" data-del="${item.id}" aria-label="删除">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
@@ -1024,15 +1061,39 @@ function renderCalChart(meals, start) {
   <div class="chart-legend"><span><i class="legend-dash"></i>目标 ${display(target)} kcal</span></div>`;
 }
 
+function rollingAverage(weights, days = 7) {
+  return weights.map((row) => {
+    const from = shiftDate(row.date, -(days - 1));
+    const slice = weights.filter((w) => w.date >= from && w.date <= row.date);
+    const sum = slice.reduce((acc, w) => acc + num(w.weight), 0);
+    return { date: row.date, value: sum / slice.length };
+  });
+}
+
+function weightTrend(weights) {
+  const today = todayStr();
+  const recent = weights.filter((w) => w.date >= shiftDate(today, -13));
+  const mid = shiftDate(today, -6);
+  const firstHalf = recent.filter((w) => w.date < mid);
+  const secondHalf = recent.filter((w) => w.date >= mid);
+  if (firstHalf.length < 2 || secondHalf.length < 2) return '';
+  const avg = (rows) => rows.reduce((acc, r) => acc + num(r.weight), 0) / rows.length;
+  const diff = avg(secondHalf) - avg(firstHalf);
+  if (Math.abs(diff) < 0.2) return '最近两周体重均值几乎没变，可以把每日缺口再放小 100 kcal。';
+  if (diff < -0.8) return `最近七天均值比前七天低 ${Math.abs(diff).toFixed(1)} kg，偏快，注意蛋白和脂肪别缺。`;
+  return '';
+}
+
 function renderWeightChart(weights, start, end) {
   const box = $('weightChart');
   if (!weights.length) {
     box.innerHTML = '<p class="chart-empty">还没有体重记录。</p>';
     return;
   }
-  const values = weights.map((w) => num(w.weight));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const avgRows = rollingAverage(weights);
+  const all = weights.map((w) => num(w.weight)).concat(avgRows.map((a) => a.value));
+  const min = Math.min(...all);
+  const max = Math.max(...all);
   const span = Math.max(max - min, 1);
   const low = min - span * 0.2;
   const high = max + span * 0.2;
@@ -1045,17 +1106,22 @@ function renderWeightChart(weights, start, end) {
     return PL + chartW * (days / (totalDays - 1));
   };
   const y = (value) => PT + chartH * (1 - (value - low) / (high - low));
-  const points = weights.map((w) => `${x(w.date).toFixed(1)},${y(num(w.weight)).toFixed(1)}`).join(' ');
-  const dots = weights.map((w) => `<circle cx="${x(w.date).toFixed(1)}" cy="${y(num(w.weight)).toFixed(1)}" r="2.5" fill="#4f46e5"/>`).join('');
+  const rawPoints = weights.map((w) => `${x(w.date).toFixed(1)},${y(num(w.weight)).toFixed(1)}`).join(' ');
+  const avgPoints = avgRows.map((a) => `${x(a.date).toFixed(1)},${y(a.value).toFixed(1)}`).join(' ');
+  const dots = weights.map((w) => `<circle cx="${x(w.date).toFixed(1)}" cy="${y(num(w.weight)).toFixed(1)}" r="2" fill="#c4c8d0"/>`).join('');
   const lowLabel = max - min < 0.05 ? '' : `<text x="${PL - 6}" y="${(y(min) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="#8a8f99">${min.toFixed(1)}</text>`;
+  const trend = weightTrend(weights);
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="体重折线图">
     <text x="${PL - 6}" y="${(y(max) + 3).toFixed(1)}" text-anchor="end" font-size="10" fill="#8a8f99">${max.toFixed(1)}</text>
     ${lowLabel}
     <text x="${PL}" y="${H - 6}" font-size="10" fill="#8a8f99">${fmtShort(start)}</text>
     <text x="${W - PR}" y="${H - 6}" text-anchor="end" font-size="10" fill="#8a8f99">${fmtShort(end)}</text>
-    <polyline points="${points}" fill="none" stroke="#4f46e5" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="${rawPoints}" fill="none" stroke="#c4c8d0" stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round"/>
     ${dots}
-  </svg>`;
+    <polyline points="${avgPoints}" fill="none" stroke="#4f46e5" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>
+  <div class="chart-legend"><span><i class="legend-line light"></i>单次体重</span><span><i class="legend-line accent"></i>7 日均值</span></div>
+  ${trend ? `<p class="hint">${trend}</p>` : ''}`;
 }
 
 function renderSummary(meals, weights, start, end) {
@@ -1084,6 +1150,10 @@ function renderSummary(meals, weights, start, end) {
 function renderSettings() {
   const p = state.profile;
   const m = state.metrics;
+  const persona = p.persona;
+  const personaHint = persona
+    ? `按你的描述，每天大约消耗 ${display(persona.tdee)} kcal${persona.note ? '。依据：' + escapeHtml(persona.note) : ''}`
+    : '还没估过。写一段日常，让 AI 估一下每天大约消耗多少。';
   const box = $('settingsMain');
   box.innerHTML = `
     <section class="group">
@@ -1098,28 +1168,42 @@ function renderSettings() {
       </div>
     </section>
     <section class="group">
+      <h2 class="group-title">人物画像</h2>
+      <textarea id="personaText" class="text-area" rows="3" placeholder="例如：大学生，每天上下课步行 30 分钟，每周打两次球，其余时间坐着">${escapeHtml(persona ? persona.text : '')}</textarea>
+      <div class="persona-actions">
+        <button id="personaRun" class="primary-btn small">AI 估算</button>
+        <button id="personaClear" class="text-btn">清除画像</button>
+      </div>
+      <p id="personaState" class="hint">${personaHint}</p>
+      <p class="hint">描述只保存在本机，点 AI 估算时会连同身体信息一起发给 DeepSeek。</p>
+    </section>
+    <section class="group">
       <h2 class="group-title">摄入参数</h2>
       <div class="rows">
         ${settingRow('deficit', '每日热量缺口', p.goal === 'cut' ? `${p.deficit} kcal` : '仅减脂生效')}
         ${settingRow('proteinFactor', '蛋白质系数', `${p.proteinFactor} g/kg`)}
         ${settingRow('fatRatio', '脂肪占比', `${Math.round(p.fatRatio * 100)}%`)}
       </div>
-      <p class="hint">减脂：目标热量 = 总消耗 - 缺口；维持取总消耗；增肌取总消耗的 1.1 倍。蛋白质按体重乘系数，脂肪按目标热量占比，剩下给碳水。</p>
+      <p class="hint">减脂时从每天的总消耗里减去缺口，剩下的就是一天该吃的量；维持按总消耗吃，增肌比总消耗多一点。蛋白质按体重算，脂肪按热量比例但不低于体重下限，剩下给碳水。</p>
     </section>
     <section class="group">
       <h2 class="group-title">计算结果</h2>
       <div class="rows">
         ${staticRow('BMI', m.bmi.toFixed(1))}
         ${staticRow('基础代谢', `${display(m.bmr)} kcal`)}
-        ${staticRow('每日总消耗', `${display(m.tdee)} kcal`)}
+        ${staticRow('每日总消耗', `${display(m.tdee)} kcal${m.personaActive ? ' · AI 估算' : ''}`)}
         ${staticRow('每日目标热量', `${display(m.target)} kcal`)}
-        ${staticRow('预计每日缺口', m.gap >= 0 ? `${display(m.gap)} kcal` : `盈余 ${display(-m.gap)} kcal`)}
+        ${staticRow('预计每日缺口', m.gap >= 0 ? `${display(m.gap)} kcal · ${Math.round(m.gapRatio * 100)}%` : `盈余 ${display(-m.gap)} kcal`)}
         ${staticRow('蛋白质目标', `${Math.round(m.protein)} g`)}
         ${staticRow('脂肪目标', `${Math.round(m.fat)} g`)}
         ${staticRow('碳水目标', `${Math.round(m.carbs)} g`)}
       </div>
       ${m.clamped ? `<p class="hint">目标热量已触及安全下限，实际缺口约 ${display(m.gap)} kcal。</p>` : ''}
-      ${m.heavy ? '<p class="hint">缺口超过每日总消耗的三成，建议放小一些。</p>' : ''}
+      ${m.small ? '<p class="hint">缺口不到总消耗的 15%，减脂会比较慢，常见区间是 15%–20%。</p>' : ''}
+      ${m.heavy ? '<p class="hint">缺口超过总消耗的四分之一，容易掉肌肉，建议收小一些。</p>' : ''}
+      ${m.fatGuard === -1 ? `<p class="hint">脂肪按 0.6 g/kg 下限算到 ${Math.round(m.fat)} g，再低容易影响激素和恢复。</p>` : ''}
+      ${m.fatGuard === 1 ? `<p class="hint">脂肪按 1.0 g/kg 上限算到 ${Math.round(m.fat)} g，多余热量给了碳水。</p>` : ''}
+      ${m.carbsPerKg < 2 ? `<p class="hint">碳水约 ${m.carbsPerKg.toFixed(1)} g/kg，低于 2 g/kg，训练日可能没劲。</p>` : ''}
     </section>
     <section class="group">
       <h2 class="group-title">API 配置</h2>
@@ -1169,6 +1253,8 @@ function renderSettings() {
       $('apiState').classList.remove('accent');
     }
   });
+  $('personaRun').addEventListener('click', runPersona);
+  $('personaClear').addEventListener('click', clearPersona);
   $('exportBtn').addEventListener('click', exportData);
   $('importBtn').addEventListener('click', () => $('importInput').click());
   $('clearBtn').addEventListener('click', askClear);
@@ -1180,6 +1266,70 @@ function settingRow(key, label, value) {
 
 function staticRow(label, value) {
   return `<div class="row static"><span class="k">${label}</span><span class="v">${value}</span></div>`;
+}
+
+async function runPersona() {
+  const text = $('personaText').value.trim();
+  if (!text) { toast('先写一句日常描述'); return; }
+  if (!state.profile.apiKey) { toast('先在上面填 API Key'); return; }
+  const button = $('personaRun');
+  button.disabled = true;
+  $('personaState').textContent = '正在估算…';
+  try {
+    const persona = await estimatePersona(text);
+    state.profile.persona = persona;
+    persistProfile();
+    state.metrics = computeMetrics(state.profile);
+    renderSettings();
+    renderHome();
+    toast('已应用画像');
+  } catch (e) {
+    $('personaState').textContent = '估算失败：' + (e.message || '网络错误');
+  } finally {
+    if ($('personaRun')) $('personaRun').disabled = false;
+  }
+}
+
+function clearPersona() {
+  if (!state.profile.persona) { toast('当前没有画像'); return; }
+  state.profile.persona = null;
+  persistProfile();
+  state.metrics = computeMetrics(state.profile);
+  renderSettings();
+  renderHome();
+  toast('已恢复按活动系数计算');
+}
+
+async function estimatePersona(text) {
+  const p = state.profile;
+  const prompt = `你是运动营养师。根据下面的信息估算这个人每天的日常总热量消耗，单位千卡。
+身高 ${p.height} 厘米，体重 ${p.weight} 公斤，年龄 ${p.age} 岁，性别${SEX_LABELS[p.sex]}，目前选择的活动水平是${ACTIVITY_LABELS[p.activity]}。
+日常描述：${text}
+只返回 JSON，不要其他文字，不要 markdown 代码块：{"tdee":数字,"activity":"sedentary|light|moderate|high","note":"一句话依据"}`;
+  const res = await fetch(CHAT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + p.apiKey },
+    body: JSON.stringify({ model: MODEL, temperature: 0.2, messages: [{ role: 'user', content: prompt }] })
+  });
+  const raw = await res.text();
+  if (!res.ok) throw new Error(`接口返回 ${res.status}`);
+  let payload = null;
+  try { payload = JSON.parse(raw); } catch (e) { payload = null; }
+  const content = payload && payload.choices && payload.choices[0] && payload.choices[0].message
+    ? String(payload.choices[0].message.content || '') : raw;
+  const match = content.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('返回内容不是 JSON');
+  let data;
+  try { data = JSON.parse(match[0]); } catch (e) { throw new Error('JSON 解析失败'); }
+  const tdee = Math.round(num(data.tdee));
+  if (!Number.isFinite(tdee) || tdee < 1000 || tdee > 6000) throw new Error('估算值超出合理范围');
+  if (state.metrics && tdee < state.metrics.bmr * 1.05) throw new Error('估算值低于基础代谢');
+  return {
+    text,
+    tdee,
+    activity: ACTIVITY[data.activity] ? data.activity : null,
+    note: String(data.note || '').slice(0, 120)
+  };
 }
 
 async function verifyKey(key) {
@@ -1196,7 +1346,7 @@ async function exportData() {
       height: state.profile.height, weight: state.profile.weight, age: state.profile.age,
       sex: state.profile.sex, activity: state.profile.activity, goal: state.profile.goal,
       deficit: state.profile.deficit, proteinFactor: state.profile.proteinFactor,
-      fatRatio: state.profile.fatRatio
+      fatRatio: state.profile.fatRatio, persona: state.profile.persona
     };
     const json = JSON.stringify(data, null, 2);
     const name = `热量记录-${todayStr()}.json`;
@@ -1240,6 +1390,17 @@ function onPickImport() {
         await importAll(data);
         if (data.profile) {
           state.profile = { ...state.profile, ...data.profile };
+          const persona = data.profile.persona;
+          if (persona && Number.isFinite(Number(persona.tdee)) && Number(persona.tdee) > 0) {
+            state.profile.persona = {
+              text: String(persona.text || ''),
+              tdee: Number(persona.tdee),
+              activity: ACTIVITY[persona.activity] ? persona.activity : null,
+              note: String(persona.note || '')
+            };
+          } else {
+            state.profile.persona = null;
+          }
           persistProfile();
           state.metrics = computeMetrics(state.profile);
         }

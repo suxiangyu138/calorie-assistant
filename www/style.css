@@ -283,27 +283,37 @@ input {
 .meal-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 44px;
+  gap: 8px;
+  min-height: 60px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--line-soft);
 }
 
 .meal-row:last-child { border-bottom: 0; }
 
+.meal-info { flex: 1; min-width: 0; }
+
+.meal-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .meal-name {
-  flex: 1;
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.meal-sub { font-size: 13px; color: var(--text-3); margin-left: 6px; }
+.meal-meta { font-size: 13px; color: var(--text-3); margin-top: 2px; }
 
 .meal-kcal {
   font-size: 15px;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
+  flex: none;
 }
 
 .meal-del {
@@ -806,7 +816,16 @@ input {
 
 .dialog-option:last-child { border-bottom: 0; }
 .dialog-option.on { color: var(--accent); }
-.dialog-option svg { width: 18px; height: 18px; }
+.dialog-option svg { width: 18px; height: 18px; flex: none; }
+
+.dialog-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.dialog-option-desc { font-size: 13px; color: var(--text-2); }
 
 .dialog-foot {
   display: flex;
@@ -855,6 +874,18 @@ input {
   vertical-align: middle;
   margin-right: 6px;
 }
+
+.legend-line {
+  display: inline-block;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.legend-line.light { background: var(--text-3); }
+.legend-line.accent { background: var(--accent); }
 
 .summary-rows { display: flex; flex-direction: column; }
 
@@ -925,6 +956,33 @@ input {
 }
 
 .text-input:focus { border-color: var(--accent); }
+
+.text-area {
+  width: 100%;
+  min-height: 88px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+  padding: 10px 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+.text-area:focus { border-color: var(--accent); }
+.text-area::placeholder { color: var(--text-3); }
+
+.persona-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
 
 .hint {
   margin: 8px 0 0;
