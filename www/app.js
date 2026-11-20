@@ -86,22 +86,28 @@ function computeMetrics(p) {
   const bmi = p.weight / (heightM * heightM);
   const bmr = 10 * p.weight + 6.25 * p.height - 5 * p.age + (p.sex === 'male' ? 5 : -161);
   const tdee = bmr * ACTIVITY[p.activity];
-  let target = tdee * GOAL_FACTOR[p.goal];
+  let target = tdee;
+  if (p.goal === 'cut') target = tdee - p.deficit;
+  if (p.goal === 'gain') target = tdee * GOAL_FACTOR.gain;
   const floor = bmr * 1.1;
   const clamped = target < floor;
   if (clamped) target = floor;
-  const protein = p.weight * (p.goal === 'cut' ? 1.8 : 1.6);
-  const fat = (target * 0.22) / 9;
-  const carbs = (target - protein * 4 - fat * 9) / 4;
+  const gap = tdee - target;
+  const protein = p.weight * p.proteinFactor;
+  const fat = (target * p.fatRatio) / 9;
+  const carbs = Math.max(0, (target - protein * 4 - fat * 9) / 4);
+  const heavy = !clamped && gap > tdee * 0.35;
   return {
     bmi: round(bmi, 2),
     bmr: round(bmr, 2),
     tdee: round(tdee, 2),
     target: round(target, 2),
+    gap: round(gap, 2),
     protein: round(protein, 2),
     fat: round(fat, 2),
     carbs: round(carbs, 2),
-    clamped
+    clamped,
+    heavy
   };
 }
 
@@ -111,11 +117,15 @@ function loadProfile() {
     if (!raw) return null;
     const p = JSON.parse(raw);
     if (!p || !p.height || !p.weight) return null;
+    const goal = GOAL_FACTOR[p.goal] ? p.goal : 'cut';
     return {
       height: num(p.height), weight: num(p.weight), age: num(p.age, 22),
       sex: p.sex === 'female' ? 'female' : 'male',
       activity: ACTIVITY[p.activity] ? p.activity : 'sedentary',
-      goal: GOAL_FACTOR[p.goal] ? p.goal : 'cut',
+      goal,
+      deficit: Number.isFinite(Number(p.deficit)) ? Number(p.deficit) : 350,
+      proteinFactor: Number.isFinite(Number(p.proteinFactor)) ? Number(p.proteinFactor) : (goal === 'cut' ? 1.8 : 1.6),
+      fatRatio: Number.isFinite(Number(p.fatRatio)) ? Number(p.fatRatio) : 0.22,
       apiKey: typeof p.apiKey === 'string' ? p.apiKey : ''
     };
   } catch (e) {
@@ -127,11 +137,13 @@ function persistProfile() {
   localStorage.setItem('profile', JSON.stringify({
     height: state.profile.height, weight: state.profile.weight, age: state.profile.age,
     sex: state.profile.sex, activity: state.profile.activity, goal: state.profile.goal,
+    deficit: state.profile.deficit, proteinFactor: state.profile.proteinFactor,
+    fatRatio: state.profile.fatRatio,
     apiKey: state.profile.apiKey
   }));
 }
 
-const DEFAULT_PROFILE = { height: 175, weight: 65, age: 22, sex: 'male', activity: 'sedentary', goal: 'cut', apiKey: '' };
+const DEFAULT_PROFILE = { height: 175, weight: 65, age: 22, sex: 'male', activity: 'sedentary', goal: 'cut', deficit: 350, proteinFactor: 1.8, fatRatio: 0.22, apiKey: '' };
 let draft = { ...DEFAULT_PROFILE };
 
 async function init() {
@@ -160,7 +172,8 @@ function renderOnboardingForm() {
     ['age', '年龄', `${draft.age} 岁`],
     ['sex', '性别', SEX_LABELS[draft.sex]],
     ['activity', '活动水平', ACTIVITY_LABELS[draft.activity]],
-    ['goal', '目标', GOAL_LABELS[draft.goal]]
+    ['goal', '目标', GOAL_LABELS[draft.goal]],
+    ['deficit', '每日热量缺口', draft.goal === 'cut' ? `${draft.deficit} kcal` : '仅减脂生效']
   ];
   const box = $('onboardingForm');
   box.innerHTML = rows.map(([key, label, value]) => `
@@ -206,8 +219,74 @@ function editField(key, target, done) {
     promptChoice({
       title: '目标', value: target.goal,
       options: [['cut', '减脂'], ['maintain', '维持'], ['gain', '增肌']],
-      onOk: (v) => { target.goal = v; done(); }
+      onOk: (v) => {
+        const oldDefault = target.goal === 'cut' ? 1.8 : 1.6;
+        if (Math.abs(target.proteinFactor - oldDefault) < 0.001) {
+          target.proteinFactor = v === 'cut' ? 1.8 : 1.6;
+        }
+        target.goal = v;
+        done();
+      }
     });
+    return;
+  }
+  if (key === 'deficit') {
+    if (target.goal !== 'cut') { toast('热量缺口只在减脂目标下生效'); return; }
+    promptChoice({
+      title: '每日热量缺口',
+      value: String(target.deficit),
+      options: [['200', '200 kcal'], ['300', '300 kcal'], ['350', '350 kcal'], ['400', '400 kcal'], ['500', '500 kcal'], ['custom', '自定义']],
+      onOk: (v) => {
+        if (v === 'custom') {
+          promptNumber({
+            title: '自定义缺口', value: target.deficit, unit: 'kcal',
+            onOk: (input) => { target.deficit = Math.min(1500, Math.round(input)); done(); }
+          });
+          return;
+        }
+        target.deficit = Number(v);
+        done();
+      }
+    });
+    return;
+  }
+  if (key === 'proteinFactor') {
+    promptChoice({
+      title: '蛋白质系数',
+      value: String(target.proteinFactor),
+      options: [['1.2', '1.2 g/kg'], ['1.6', '1.6 g/kg'], ['1.8', '1.8 g/kg'], ['2', '2.0 g/kg'], ['custom', '自定义']],
+      onOk: (v) => {
+        if (v === 'custom') {
+          promptNumber({
+            title: '自定义蛋白质系数', value: target.proteinFactor, unit: 'g/kg',
+            onOk: (input) => { target.proteinFactor = Math.min(3, Math.max(0.8, input)); done(); }
+          });
+          return;
+        }
+        target.proteinFactor = Number(v);
+        done();
+      }
+    });
+    return;
+  }
+  if (key === 'fatRatio') {
+    promptChoice({
+      title: '脂肪占比',
+      value: String(Math.round(target.fatRatio * 100)),
+      options: [['20', '20%'], ['22', '22%'], ['25', '25%'], ['30', '30%'], ['custom', '自定义']],
+      onOk: (v) => {
+        if (v === 'custom') {
+          promptNumber({
+            title: '自定义脂肪占比', value: Math.round(target.fatRatio * 100), unit: '%',
+            onOk: (input) => { target.fatRatio = Math.min(0.45, Math.max(0.15, input / 100)); done(); }
+          });
+          return;
+        }
+        target.fatRatio = Number(v) / 100;
+        done();
+      }
+    });
+    return;
   }
 }
 
@@ -240,7 +319,7 @@ function promptChoice({ title, value, options, onOk }) {
       </button>`).join('')}</div>`,
     onOpen: () => {
       $('dialogBody').querySelectorAll('.dialog-option').forEach((btn) => {
-        btn.addEventListener('click', () => { onOk(btn.dataset.value); closeDialog(); });
+        btn.addEventListener('click', () => { closeDialog(); onOk(btn.dataset.value); });
       });
       $('dialogOk').classList.add('hidden');
       $('dialogCancel').textContent = '关闭';
@@ -1019,17 +1098,28 @@ function renderSettings() {
       </div>
     </section>
     <section class="group">
+      <h2 class="group-title">摄入参数</h2>
+      <div class="rows">
+        ${settingRow('deficit', '每日热量缺口', p.goal === 'cut' ? `${p.deficit} kcal` : '仅减脂生效')}
+        ${settingRow('proteinFactor', '蛋白质系数', `${p.proteinFactor} g/kg`)}
+        ${settingRow('fatRatio', '脂肪占比', `${Math.round(p.fatRatio * 100)}%`)}
+      </div>
+      <p class="hint">减脂：目标热量 = 总消耗 - 缺口；维持取总消耗；增肌取总消耗的 1.1 倍。蛋白质按体重乘系数，脂肪按目标热量占比，剩下给碳水。</p>
+    </section>
+    <section class="group">
       <h2 class="group-title">计算结果</h2>
       <div class="rows">
         ${staticRow('BMI', m.bmi.toFixed(1))}
         ${staticRow('基础代谢', `${display(m.bmr)} kcal`)}
         ${staticRow('每日总消耗', `${display(m.tdee)} kcal`)}
         ${staticRow('每日目标热量', `${display(m.target)} kcal`)}
+        ${staticRow('预计每日缺口', m.gap >= 0 ? `${display(m.gap)} kcal` : `盈余 ${display(-m.gap)} kcal`)}
         ${staticRow('蛋白质目标', `${Math.round(m.protein)} g`)}
         ${staticRow('脂肪目标', `${Math.round(m.fat)} g`)}
         ${staticRow('碳水目标', `${Math.round(m.carbs)} g`)}
       </div>
-      ${m.clamped ? '<p class="hint">目标热量已到安全下限，按基础代谢的 1.1 倍计算。</p>' : ''}
+      ${m.clamped ? `<p class="hint">目标热量已触及安全下限，实际缺口约 ${display(m.gap)} kcal。</p>` : ''}
+      ${m.heavy ? '<p class="hint">缺口超过每日总消耗的三成，建议放小一些。</p>' : ''}
     </section>
     <section class="group">
       <h2 class="group-title">API 配置</h2>
@@ -1104,7 +1194,9 @@ async function exportData() {
     const data = await exportAll();
     data.profile = {
       height: state.profile.height, weight: state.profile.weight, age: state.profile.age,
-      sex: state.profile.sex, activity: state.profile.activity, goal: state.profile.goal
+      sex: state.profile.sex, activity: state.profile.activity, goal: state.profile.goal,
+      deficit: state.profile.deficit, proteinFactor: state.profile.proteinFactor,
+      fatRatio: state.profile.fatRatio
     };
     const json = JSON.stringify(data, null, 2);
     const name = `热量记录-${todayStr()}.json`;
